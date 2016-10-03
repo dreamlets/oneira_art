@@ -5,7 +5,7 @@ require 'cutorch'
 require 'image'
 
 --add model dependencies
-require 'graphnn' 
+require 'nngraph' 
 require 'lib/Sampler'
 require 'lib/GaussianCriterion'
 require 'lib/KLDCriterion'
@@ -25,11 +25,11 @@ parser:option('-e --extension', 'extension of desired output images (jpg or png)
 parser:option('-c --channels', 'number of channels for input images', '3') 
 parser:option('-d --dimensions', 'dimension of images (must be square)', '128')
 
-args = parser.parse()
+args = parser:parse()
 
 in_folder = args.input
 out_folder = args.output
-dataset_size = args.size
+dataset_size = tonumber(args.size)
 extension = args.extension
 
 --define dataset and model options
@@ -39,12 +39,12 @@ dim = args.dimensions
 
 --load model, build dataset and reshape tensors
 model = torch.load('model/BR_DCGAN_4000_VAE.t7')
-dataset = torch.Tensor(dataset_size, channels, dim, dim)
+dataset = torch.FloatTensor(dataset_size, channels, dim, dim)
 reshape = nn.Reshape(channels, dim, dim)
 
 --ensure everything expects torch.Float tensors
 model:float() 
-dataset:float() 
+dataset:float()
 reshape:float()
 
 count = 1
@@ -54,12 +54,27 @@ for file in lfs.dir(in_folder) do
     xlua.progress(count, dataset_size)
     if count >= dataset_size then 
         break 
-    end 
-    isImage, sample = pcall(image.load, file)
-    if isImage then 
-        dataset[count] = sample
-    else 
-        print('bad file. skipping...')
     end
-    count = count + 1 
+    if file ~= '.' and file ~= '..' then
+        dataset[count] = image.load(in_folder .. file)
+        count = count + 1
+    end
 end
+
+tm = torch.Timer()
+
+for i = 1, dataset_size, batch_size do 
+    xlua.progress(1, dataset_size)
+    local size = math.min(i + batch_size - 1, dataset_size) - i
+    local input_x = dataset:narrow(1, size, batch_size)
+    local samples, __ = table.unpack(model:forward(input_x))
+    samples = reshape:forward(samples)
+    print('Current memory usage: ' .. collectgarbage("count"))
+    print('Saving batch samples...') 
+    for idx = 1, batch_size do 
+        image.save(out_folder .. 'Sample' .. (idx + i) .. '.' .. extension, samples[idx])
+    end
+end
+
+print('Completed forward pass in: ' .. tm:time().real) 
+print('Samples saved at ' .. out_folder) 
