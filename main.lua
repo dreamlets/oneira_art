@@ -1,7 +1,5 @@
 --add Torch dependencies 
 require 'nn'
-require 'cunn'
-require 'cutorch'
 require 'image'
 
 --add model dependencies
