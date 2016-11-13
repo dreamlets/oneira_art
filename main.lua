@@ -1,78 +1,56 @@
---add Torch dependencies 
-require 'nn'
 require 'image'
-
---add model dependencies
-require 'nngraph' 
-require 'lib/Sampler'
-require 'lib/GaussianCriterion'
-require 'lib/KLDCriterion'
-require 'lib/VAE'
-
---add utilities
 require 'xlua'
-local argparse = require 'argparse'
+require 'nn'
+require 'dpnn'
+require 'optim'
 require 'lfs'
 
---parse cmd options 
-local parser = argparse('oneira main', 'execute forward pass of oneira model on some input image sequence')
-parser:option('-i --input', 'destination of input image sequence')
-parser:option('-o --output', 'destination of output images')
-parser:option('-s --size', 'size of image dataset', '100')
-parser:option('-e --extension', 'extension of desired output images (jpg or png)', 'jpg')
-parser:option('-c --channels', 'number of channels for input images', '3') 
-parser:option('-d --dimensions', 'dimension of images (must be square)', '128')
+local VAE = require 'VAE'
+local discriminator = require 'discriminator'
+
+local argparse = require 'argparse'
+local parser = argparse('oneira art', 'a fine-art generator')
+parser:option('-i --input', 'input directory for image dataset')
+parser:option('-o --output', 'output directory for generated images')
+parser:option('-s --size', 'number of samples generated')
+parser:option('-m --model', 'location of model') 
 
 args = parser:parse()
 
-in_folder = args.input
-out_folder = args.output
-dataset_size = tonumber(args.size)
-extension = args.extension
+input = args.input
+output_folder = args.output
+dataset_size = args.size
+model_path = args.model
 
---define dataset and model options
-batch_size = 10 
-channels = args.channels
-dim = args.dimensions
+torch.setnumthreads(4)
 
---load model, build dataset and reshape tensors
-model = torch.load('model/BR_DCGAN_4000_VAE.t7')
-dataset = torch.FloatTensor(dataset_size, channels, dim, dim)
-reshape = nn.Reshape(channels, dim, dim)
-
---ensure everything expects torch.Float tensors
-model:float() 
-dataset:float()
-reshape:float()
-
-count = 1
-print('adding photos to tensor...')
-
-for file in lfs.dir(in_folder) do
-    xlua.progress(count, dataset_size)
-    if count >= dataset_size then 
-        break 
-    end
-    if file ~= '.' and file ~= '..' then
-        dataset[count] = image.load(in_folder .. file)
-        count = count + 1
-    end
+function getNumber(num)
+  length = #tostring(num)
+  filename = ""
+  for i=1, (6 - length) do
+    filename = filename .. 0
+  end
+  filename = filename .. num
+  return filename
 end
 
+channels = 3
+dim = 256
+z_dim = 100
+
+model = torch.load(model_path)
+
+--noise to pass through decoder to generate random samples from Z
+noise_x = torch.Tensor(batch_size, z_dim, 1, 1)
+noise_x:normal(0, 0.01)
+
+epoch_tm = torch.Timer()
 tm = torch.Timer()
+data_tm = torch.Timer()
 
-for i = 1, dataset_size, batch_size do 
-    xlua.progress(1, dataset_size)
-    local size = math.min(i + batch_size - 1, dataset_size) - i
-    local input_x = dataset:narrow(1, size, batch_size)
-    local samples, __ = table.unpack(model:forward(input_x))
-    samples = reshape:forward(samples)
-    print('Current memory usage: ' .. collectgarbage("count"))
-    print('Saving batch samples...') 
-    for idx = 1, batch_size do 
-        image.save(out_folder .. 'Sample' .. (idx + i) .. '.' .. extension, samples[idx])
-    end
+noise_x:normal(0, 0.01)
+generations = decoder:forward(noise_x)
+for i = 1, batch_size do
+    image.save(output_folder .. getNumber(i) .. '.png', generations[i])
 end
 
-print('Completed forward pass in: ' .. tm:time().real) 
-print('Samples saved at ' .. out_folder) 
