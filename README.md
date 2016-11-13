@@ -1,4 +1,4 @@
-# oneira 
+# oneira-art
 
 Dependencies: 
 * Torch7
