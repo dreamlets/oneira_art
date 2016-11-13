@@ -19,7 +19,7 @@ args = parser:parse()
 
 input = args.input
 output_folder = args.output
-dataset_size = args.size
+batch_size = args.size
 model_path = args.model
 
 torch.setnumthreads(4)
@@ -34,8 +34,6 @@ function getNumber(num)
   return filename
 end
 
-channels = 3
-dim = 256
 z_dim = 100
 
 model = torch.load(model_path)
