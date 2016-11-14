@@ -20,10 +20,11 @@ model_path = args.model
 
 torch.setnumthreads(4)
 
+--pad zeros to the end of generated images, up to four
 function getNumber(num)
   length = #tostring(num)
   filename = ""
-  for i=1, (6 - length) do
+  for i=1, (4 - length) do
     filename = filename .. 0
   end
   filename = filename .. num
@@ -32,18 +33,16 @@ end
 
 z_dim = 100
 
+--the model contains a variational autoencoder, with an encoder, variational sampler, and decoder. 
+--the decoder is all we need for the generation 
 model = torch.load(model_path).modules[3]
 
 --noise to pass through decoder to generate random samples from Z
 noise_x = torch.Tensor(batch_size, z_dim, 1, 1):float()
 noise_x:normal(0, 0.01)
 
-epoch_tm = torch.Timer()
-tm = torch.Timer()
-data_tm = torch.Timer()
-
-noise_x:normal(0, 0.01)
 generations = model:forward(noise_x)
+
 for i = 1, batch_size do
     image.save(output_folder .. getNumber(i) .. '.png', generations[i])
 end
